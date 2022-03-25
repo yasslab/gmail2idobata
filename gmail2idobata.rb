@@ -33,6 +33,7 @@ IDOBATA_END  = ENV['IDOBATA_END']
 mails = @gmail.inbox.emails(:unread).each do |mail|
   text = ""
   is_html_format = false
+  is_mitoujr_app = false
 
   #text  += "<li>件名:   #{mail.subject}</li>"
   #text  += "<li>日付:   #{mail.date}</li>"
@@ -43,6 +44,7 @@ mails = @gmail.inbox.emails(:unread).each do |mail|
     text += "<b>件名なし</b><br>"
   else
     text += "<b>#{mail.subject.toutf8}</b><br>"
+    is_mitoujr_app = true if text.include?('未踏ジュニア2022 応募フォーム')
   end
 
   begin
@@ -62,7 +64,31 @@ mails = @gmail.inbox.emails(:unread).each do |mail|
 
   post = text.gsub("\n", "").gsub("'", "\"")
   puts post
-  puts is_html_format
+  puts "Is HTML format? => #{is_html_format}"
+
+  if is_mitoujr_app == true
+    require 'nokogiri'
+    require 'net/http'
+
+    doc = Nokogiri::HTML.parse(text)
+
+    # Get Title & File (URL)
+    title = doc.at("th[text()*='提案のタイトル']").next_element.text.strip
+    file  = doc.at("a[href*='mitoujr.wufoo.com/cabinet']")['href']
+
+    uri = URI.parse('https://mattermost.jr.mitou.org/hooks/huxdejyasbgdjgctwtxjf8udje')
+    request = Net::HTTP::Post.new(uri)
+    request.content_type = 'application/json'
+    request.body = JSON.dump({ text: ":new: 提案書: #{title} #{file}" })
+
+    response = Net::HTTP.start(uri.hostname, uri.port, { use_ssl: uri.scheme == "https" }) do |http|
+      http.request(request)
+    end
+
+    # response.code
+    # response.body
+    next
+  end
 
   if is_html_format
     system("curl --data-urlencode 'source=#{post}' -d format=html #{IDOBATA_END}")
